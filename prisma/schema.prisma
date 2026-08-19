@@ -96,4 +96,80 @@ model RecipientLog {
   attachmentSha256        String?
   attachmentStatus        String?
   attachmentError         String?
+
+  // Certificate link fields
+  certificateId           String?
+  certificate             GeneratedCertificate? @relation(fields: [certificateId], references: [id], onDelete: SetNull)
+}
+
+model CertificateTemplate {
+  id              String                       @id @default(uuid())
+  name            String
+  description     String?
+  backgroundKey   String                       // Storage key of the background image
+  width           Float                        // Default width in points (e.g., A4: 841.89)
+  height          Float                        // Default height in points (e.g., A4: 595.28)
+  orientation     String                       @default("LANDSCAPE") // LANDSCAPE, PORTRAIT
+  active          Boolean                      @default(true)
+  createdAt       DateTime                     @default(now())
+  updatedAt       DateTime                     @updatedAt
+  versions        CertificateTemplateVersion[]
+  batches         CertificateBatch[]
+}
+
+model CertificateTemplateVersion {
+  id              String             @id @default(uuid())
+  templateId      String
+  template        CertificateTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  version         Int
+  configuration   Json               // Layout coordinates, sizes, fonts, colors, transform rules
+  backgroundKey   String
+  signature1Key   String?            // Optional signature 1 image key
+  signature2Key   String?            // Optional signature 2 image key
+  createdAt       DateTime           @default(now())
+  batches         CertificateBatch[]
+}
+
+model CertificateBatch {
+  id                String                 @id @default(uuid())
+  name              String
+  templateId        String
+  template          CertificateTemplate    @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  templateVersionId String
+  templateVersion   CertificateTemplateVersion @relation(fields: [templateVersionId], references: [id], onDelete: Restrict)
+  status            String                 @default("DRAFT") // DRAFT, GENERATING, GENERATED, FAILED, ARCHIVED
+  nameColumn        String
+  emailColumn       String?
+  idColumn          String?
+  filenamePattern   String                 @default("{id}-{nome-normalizado}") // pattern for PDF filenames
+  totalRows         Int                    @default(0)
+  validRows         Int                    @default(0)
+  generatedCount    Int                    @default(0)
+  failedCount       Int                    @default(0)
+  campaignId        String?                // Optional linked campaign ID
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  certificates      GeneratedCertificate[]
+}
+
+model GeneratedCertificate {
+  id              String           @id @default(uuid())
+  batchId         String
+  batch           CertificateBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  sourceRow       Int              // Original row index in Excel
+  externalId      String?          // Value from the ID column
+  participantName String
+  email           String?          // Optional email
+  variables       Json             // Full row data JSON
+  filename        String           // Real PDF file name (e.g. "001-joao-silva.pdf")
+  storageKey      String?          // Key on disk (e.g. "storage/certificate-batches/{batchId}/certificates/{id}.pdf")
+  mimeType        String           @default("application/pdf")
+  fileSize        Int?
+  sha256          String?
+  status          String           @default("PENDING") // PENDING, GENERATING, GENERATED, FAILED
+  errorMessage    String?
+  generatedAt     DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  recipientLogs   RecipientLog[]   // Link to campaign recipient log if sent
 }
