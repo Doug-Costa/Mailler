@@ -1,0 +1,83 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider      = "prisma-client"
+  output        = "../src/generated/prisma"
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x", "rhel-openssl-1.0.x", "rhel-openssl-1.1.x", "rhel-openssl-3.0.x", "linux-musl", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SmtpConfig {
+  id        String     @id @default(uuid())
+  name      String
+  host      String
+  port      Int
+  user      String
+  pass      String     // Encrypted
+  secure    Boolean    @default(false)
+  active    Boolean    @default(false)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  campaigns Campaign[]
+}
+
+model Template {
+  id        String     @id @default(uuid())
+  name      String
+  subject   String
+  body      String     @db.Text
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  campaigns Campaign[]
+}
+
+model Campaign {
+  id                        String         @id @default(uuid())
+  name                      String
+  templateId                String?
+  template                  Template?      @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  smtpConfigId              String?
+  smtpConfig                SmtpConfig?    @relation(fields: [smtpConfigId], references: [id], onDelete: SetNull)
+  status                    String         @default("PENDING") // PENDING, PROCESSING, PAUSED, COMPLETED, CANCELLED
+  totalEmails               Int            @default(0)
+  sentEmails                Int            @default(0)
+  failedEmails              Int            @default(0)
+  openedEmails              Int            @default(0)
+  sendingMode               String         @default("IMMEDIATE") // IMMEDIATE, FIXED, RANDOM
+  minDelay                  Int            @default(100)        // em ms
+  maxDelay                  Int            @default(1000)       // em ms (usado se RANDOM)
+  nextCampaignId            String?        @unique
+  nextCampaignDelayMinutes  Int            @default(0)
+  scheduledStartAt          DateTime?
+  nextCampaign              Campaign?      @relation("LinkedCampaigns", fields: [nextCampaignId], references: [id], onDelete: SetNull)
+  prevCampaign              Campaign?      @relation("LinkedCampaigns")
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+  recipients                RecipientLog[]
+}
+
+model RecipientLog {
+  id         String    @id @default(uuid())
+  campaignId String
+  campaign   Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  email      String
+  data       Json      // Variables parsed from Excel row
+  status     String    @default("PENDING") // PENDING, SENT, FAILED
+  opened     Boolean   @default(false)
+  openedAt   DateTime?
+  error      String?
+  sentAt     DateTime?
+  createdAt  DateTime  @default(now())
+}

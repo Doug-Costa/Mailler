@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:15
+    container_name: mailller-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: mailller
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: mailller-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+
+  web:
+    build: .
+    container_name: mailller-web
+    ports:
+      - "3008:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/mailller?schema=public
+      - REDIS_URL=redis://redis:6379
+      - AES_SECRET=my-super-secret-aes-key-32-chars-long!
+    volumes:
+      - campaign-storage:/app/storage
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+  worker:
+    build: .
+    container_name: mailller-worker
+    command: npm run worker
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgrespassword@db:5432/mailller?schema=public
+      - REDIS_URL=redis://redis:6379
+      - AES_SECRET=my-super-secret-aes-key-32-chars-long!
+    volumes:
+      - campaign-storage:/app/storage
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  campaign-storage:

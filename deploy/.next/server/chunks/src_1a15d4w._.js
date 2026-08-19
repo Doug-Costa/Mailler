@@ -1,0 +1,3 @@
+module.exports=[23322,a=>{"use strict";async function e(){try{let{ensureAdminUser:e,triggerDbWorker:s}=await a.A(51136);await e(),await s(),console.log("✅ [Instrumentation] Aplicação inicializada com sucesso.")}catch(a){console.error("❌ [Instrumentation] Falha ao inicializar aplicação:",a)}}a.s(["register",0,e])},51136,a=>{a.v(e=>Promise.all(["server/chunks/[externals]__04zeu01._.js","server/chunks/_1zal9a3._.js"].map(e=>a.l(e))).then(()=>e(32398)))}];
+
+//# sourceMappingURL=src_1a15d4w._.js.map
