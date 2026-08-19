@@ -5,11 +5,12 @@ import SmtpPanel from '@/components/SmtpPanel';
 import TemplatePanel from '@/components/TemplatePanel';
 import UploadPanel from '@/components/UploadPanel';
 import CampaignPanel from '@/components/CampaignPanel';
-import { Mail, LayoutDashboard, FileText, Send, Settings, ShieldAlert, LogOut } from 'lucide-react';
+import CertificatePanel from '@/components/CertificatePanel';
+import { Mail, LayoutDashboard, FileText, Send, Settings, ShieldAlert, LogOut, Award } from 'lucide-react';
 import { logoutAction } from '@/app/actions/auth';
 import { useRouter } from 'next/navigation';
 
-type TabType = 'dashboard' | 'upload' | 'templates' | 'smtp';
+type TabType = 'dashboard' | 'upload' | 'templates' | 'smtp' | 'certificates';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -140,6 +141,13 @@ export default function Home() {
               <Settings size={18} />
               SMTP Config
             </button>
+            <button 
+              className={`nav-item ${activeTab === 'certificates' ? 'active' : ''}`}
+              onClick={() => setActiveTab('certificates')}
+            >
+              <Award size={18} />
+              Certificados
+            </button>
           </div>
         </aside>
 
@@ -159,6 +167,9 @@ export default function Home() {
           )}
           {activeTab === 'smtp' && (
             <SmtpPanel />
+          )}
+          {activeTab === 'certificates' && (
+            <CertificatePanel />
           )}
         </section>
       </div>

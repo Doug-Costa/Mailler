@@ -17,7 +17,127 @@ function compileTemplate(text: string, data: any): string {
 const worker = new Worker(
   'mail-queue',
   async (job: Job) => {
-    // 1. VERIFICAÇÃO DE JOBS DO FLUXO DE ENCADEAMENTO (start-campaign)
+    // 1. VERIFICAÇÃO DE JOBS DE GERAÇÃO DE LOTE DE CERTIFICADOS (generate-certificates)
+    if (job.name === 'generate-certificates') {
+      const { batchId } = job.data;
+      console.log(`🤖 [Worker] Iniciando geração dos certificados do lote: ${batchId}`);
+
+      const batch = await prisma.certificateBatch.findUnique({
+        where: { id: batchId },
+        include: { templateVersion: { include: { template: true } } }
+      });
+
+      if (!batch) {
+        console.error(`Lote de certificados ${batchId} não encontrado.`);
+        return;
+      }
+
+      const pendingCerts = await prisma.generatedCertificate.findMany({
+        where: { batchId, status: 'PENDING' },
+        orderBy: { sourceRow: 'asc' }
+      });
+
+      const version = batch.templateVersion;
+      const config = version.configuration as any;
+
+      for (const cert of pendingCerts) {
+        // Atomic claim
+        const claim = await prisma.generatedCertificate.updateMany({
+          where: { id: cert.id, status: 'PENDING' },
+          data: { status: 'GENERATING' }
+        });
+
+        if (claim.count === 0) continue; // Claimed by another worker
+
+        try {
+          const { renderCertificatePdf } = await import('./lib/pdfRenderer');
+          const { saveBatchCertificate } = await import('./lib/storage');
+          const crypto = await import('crypto');
+
+          const renderParams = {
+            backgroundKey: version.backgroundKey,
+            width: version.template.width,
+            height: version.template.height,
+            name: cert.participantName,
+            nameConfig: config.nameField,
+            signature1: config.signature1?.active ? {
+              active: true,
+              storageKey: version.signature1Key || '',
+              x: config.signature1.x,
+              y: config.signature1.y,
+              width: config.signature1.width,
+              height: config.signature1.height
+            } : null,
+            signature2: config.signature2?.active ? {
+              active: true,
+              storageKey: version.signature2Key || '',
+              x: config.signature2.x,
+              y: config.signature2.y,
+              width: config.signature2.width,
+              height: config.signature2.height
+            } : null
+          };
+
+          const pdfBuffer = await renderCertificatePdf(renderParams);
+          const storageKey = await saveBatchCertificate(batchId, cert.id, pdfBuffer);
+          const sha256 = crypto.createHash('sha256').update(pdfBuffer).digest('hex');
+
+          await prisma.generatedCertificate.update({
+            where: { id: cert.id },
+            data: {
+              storageKey,
+              fileSize: pdfBuffer.length,
+              sha256,
+              status: 'GENERATED',
+              errorMessage: null,
+              generatedAt: new Date()
+            }
+          });
+
+          // Update batch count
+          await prisma.certificateBatch.update({
+            where: { id: batchId },
+            data: { generatedCount: { increment: 1 } }
+          });
+
+        } catch (err: any) {
+          console.error(`Erro ao gerar certificado para ${cert.participantName}:`, err);
+          await prisma.generatedCertificate.update({
+            where: { id: cert.id },
+            data: {
+              status: 'FAILED',
+              errorMessage: err.message || 'Erro desconhecido na geração do PDF.'
+            }
+          });
+
+          await prisma.certificateBatch.update({
+            where: { id: batchId },
+            data: { failedCount: { increment: 1 } }
+          });
+        }
+      }
+
+      // Check if batch is completed
+      const finalBatch = await prisma.certificateBatch.findUnique({
+        where: { id: batchId }
+      });
+
+      if (finalBatch) {
+        const totalProcessed = finalBatch.generatedCount + finalBatch.failedCount;
+        if (totalProcessed >= finalBatch.totalRows) {
+          const finalStatus = finalBatch.failedCount > 0 ? 'PARTIALLY_GENERATED' : 'GENERATED';
+          await prisma.certificateBatch.update({
+            where: { id: batchId },
+            data: { status: finalStatus }
+          });
+          console.log(`🤖 [Worker] Geração do lote ${finalBatch.name} finalizada com status: ${finalStatus}`);
+        }
+      }
+
+      return;
+    }
+
+    // 2. VERIFICAÇÃO DE JOBS DO FLUXO DE ENCADEAMENTO (start-campaign)
     if (job.name === 'start-campaign') {
       const { campaignId } = job.data;
       console.log(`🔗 Fluxo Ativado: Iniciando campanha agendada ${campaignId}`);
